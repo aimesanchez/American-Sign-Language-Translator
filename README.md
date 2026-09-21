@@ -11,7 +11,7 @@ A real-time American Sign Language (ASL) alphabet recognition system built using
 - Live confidence score
 - Custom dataset collected and trained from scratch
 
-##Walkthrough 
+## Walkthrough
 [walkthrough of asl translator: https://youtu.be/F_fwjUF9CYM ]
 
 ## Technologies
