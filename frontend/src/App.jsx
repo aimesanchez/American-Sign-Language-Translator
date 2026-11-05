@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import HandTracker from './components/HandTracker'
 
 const letters = 'ABCDEFGHIKLMNOPQRSTUVWXY'.split('')
 
@@ -121,6 +122,11 @@ function App() {
                   muted
                   className={cameraActive ? 'camera-video' : 'camera-hidden'}
                   aria-label="Live camera preview"
+                />
+
+                <HandTracker
+                  videoRef={videoRef}
+                  cameraActive={cameraActive}
                 />
 
                 {!cameraActive && (
