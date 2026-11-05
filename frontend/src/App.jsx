@@ -1,121 +1,286 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
+const letters = 'ABCDEFGHIKLMNOPQRSTUVWXY'.split('')
+
 function App() {
-  const [count, setCount] = useState(0)
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [cameraError, setCameraError] = useState('')
+  const [starting, setStarting] = useState(false)
+  const [predictedLetter, setPredictedLetter] = useState('—')
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach(track => track.stop())
+    }
+  }, [])
+
+  useEffect(() => {
+    if (cameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {
+        setCameraError('Unable to play the camera preview.')
+      })
+    }
+  }, [cameraActive])
+
+  async function startCamera() {
+    setCameraError('')
+    setStarting(true)
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false
+      })
+
+      streamRef.current = stream
+      setCameraActive(true)
+    } catch (error) {
+      console.error(error)
+      setCameraError('Camera unavailable. Check browser permissions.')
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach(track => track.stop())
+    streamRef.current = null
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+
+    setCameraActive(false)
+    setPredictedLetter('—')
+  }
+
+  function resetPrediction() {
+    setPredictedLetter('—')
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app" id="home">
+      <header className="site-header">
+        <nav className="navbar">
+          <a href="#home" className="brand">
+            <span className="brand-icon">✳</span>
+            ASL Recognition
+          </a>
 
-      <div className="ticks"></div>
+          <div className="nav-links">
+            <a href="#home">Home</a>
+            <a href="#about">About</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="#feedback">Feedback</a>
+          </div>
+        </nav>
+      </header>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <main className="page-content">
+        <section className="hero">
+          <div className="hero-copy">
+            <span className="eyebrow">COMPUTER VISION × MACHINE LEARNING</span>
+            <h1>American Sign Language <em>Recognition.</em></h1>
+            <p>
+              Explore how computer vision recognizes ASL fingerspelling
+              through an interactive, real-time experience.
+            </p>
+            <a href="#demo" className="hero-button">
+              Explore the Demo <span aria-hidden="true">↗</span>
+            </a>
+          </div>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+          <div className="hero-art" aria-hidden="true">
+            <span className="hero-sparkle">✳</span>
+            <span className="hero-hand">✋</span>
+            <span className="hero-art-caption">LEARN · EXPLORE · IMPROVE</span>
+          </div>
+        </section>
+
+        <div className="dashboard">
+          <section className="card recognition-card" id="demo">
+            <div className="section-heading">
+              <div className="section-icon">▣</div>
+              <div>
+                <h2>Live ASL Recognition</h2>
+                <p>Show a hand sign to the camera to explore the demo.</p>
+              </div>
+            </div>
+
+            <div className="recognition-workspace">
+              <div className="camera-frame">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={cameraActive ? 'camera-video' : 'camera-hidden'}
+                  aria-label="Live camera preview"
+                />
+
+                {!cameraActive && (
+                  <div className="camera-placeholder">
+                    <div className="camera-symbol">▣</div>
+                    <p>Your camera preview will appear here</p>
+                    <span>Ready when you are</span>
+                  </div>
+                )}
+
+                <div className="camera-corner top-left" />
+                <div className="camera-corner top-right" />
+                <div className="camera-corner bottom-left" />
+                <div className="camera-corner bottom-right" />
+
+                <div className="camera-status">
+                  <span className={cameraActive ? 'status-dot live' : 'status-dot'} />
+                  {cameraActive ? 'Camera active' : 'Camera off'}
+                </div>
+              </div>
+
+              <div className="prediction-panel">
+                <div className="prediction-display">
+                  <span className="prediction-label">PREDICTED LETTER</span>
+                  <div className="prediction-value">{predictedLetter}</div>
+                  <span className="prediction-note">
+                    {cameraActive
+                      ? 'Recognition model coming next'
+                      : 'Start camera to begin'}
+                  </span>
+                </div>
+
+                <button
+                  className="primary-button"
+                  onClick={cameraActive ? stopCamera : startCamera}
+                  disabled={starting}
+                >
+                  {starting
+                    ? 'Starting...'
+                    : cameraActive
+                      ? '■ Stop Camera'
+                      : '▶ Start Camera'}
+                </button>
+
+                <button className="secondary-button" onClick={resetPrediction}>
+                  ↻ Reset
+                </button>
+              </div>
+            </div>
+
+            {cameraError && <p className="error-message" role="alert">{cameraError}</p>}
+
+            <p className="privacy-note">
+              ◈ Your camera preview stays in your browser. No video is
+              recorded or uploaded by this demo.
+            </p>
+          </section>
+
+          <div className="side-column">
+            <section className="card alphabet-card">
+              <div className="section-heading">
+                <div className="section-icon">Aa</div>
+                <div>
+                  <h2>Supported Letters</h2>
+                  <p>24 static ASL alphabet handshapes.</p>
+                </div>
+              </div>
+
+              <div className="alphabet-grid">
+                {letters.map(letter => (
+                  <span className="letter-tile" key={letter}>{letter}</span>
+                ))}
+              </div>
+
+              <div className="info-note">
+                <span aria-hidden="true">ⓘ</span>
+                <p>
+                  J and Z are not yet supported because they involve
+                  movement.
+                </p>
+              </div>
+            </section>
+
+            <section className="card about-card" id="about">
+              <div className="section-heading">
+                <div className="section-icon">✧</div>
+                <div>
+                  <h2>About the Project</h2>
+                </div>
+              </div>
+              <p>
+                This experimental project combines MediaPipe hand tracking
+                and a machine-learning classifier to identify ASL
+                fingerspelling handshapes.
+              </p>
+              <p>
+                It's a learning and research demo, not a complete ASL
+                translator.
+              </p>
+              <a href="#how-it-works" className="text-link">
+                Learn how it works <span aria-hidden="true">→</span>
+              </a>
+            </section>
+          </div>
+
+          <section className="feedback-banner" id="feedback">
+            <div className="feedback-icon">✎</div>
+            <div className="feedback-copy">
+              <h2>Help Improve This Project</h2>
+              <p>
+                Your feedback can help us understand recognition errors,
+                improve usability, and build a better experience with the
+                ASL community.
+              </p>
+            </div>
+            <span className="feedback-coming-soon">
+              Feedback form coming soon
+            </span>
+          </section>
+        </div>
+
+        <section className="features" id="how-it-works">
+          <div className="feature">
+            <span className="feature-icon">◎</span>
+            <div>
+              <h3>Camera-Based Recognition</h3>
+              <p>Explore hand tracking through your browser's camera.</p>
+            </div>
+          </div>
+          <div className="feature">
+            <span className="feature-icon">◇</span>
+            <div>
+              <h3>Machine Learning</h3>
+              <p>A classifier trained on labeled hand landmark data.</p>
+            </div>
+          </div>
+          <div className="feature">
+            <span className="feature-icon">♡</span>
+            <div>
+              <h3>Community Driven</h3>
+              <p>Designed to evolve through testing and feedback.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="site-footer">
+        <div className="footer-content">
+          <strong>ASL Recognition</strong>
+          <span>A Computer Vision & Machine Learning Project</span>
+          <a
+            href="https://github.com/aimesanchez/American-Sign-Language-Translator"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub ↗
+          </a>
+        </div>
+      </footer>
+    </div>
   )
 }
 
