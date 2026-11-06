@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import HandTracker from './components/HandTracker'
 
@@ -12,6 +12,13 @@ function App() {
   const [cameraError, setCameraError] = useState('')
   const [starting, setStarting] = useState(false)
   const [predictedLetter, setPredictedLetter] = useState('—')
+  const handlePrediction = useCallback((prediction) => {
+    if (prediction) {
+      setPredictedLetter(prediction.letter);
+    } else {
+      setPredictedLetter('—');
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -127,6 +134,7 @@ function App() {
                 <HandTracker
                   videoRef={videoRef}
                   cameraActive={cameraActive}
+                  onPrediction={handlePrediction}
                 />
 
                 {!cameraActive && (

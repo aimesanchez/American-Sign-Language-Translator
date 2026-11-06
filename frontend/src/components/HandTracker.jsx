@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
+import { loadASLModel, predictASL } from '../utils/aslClassifier'
 
 const WASM_URL =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2/wasm'
@@ -17,9 +18,14 @@ const CONNECTIONS = [
   [0, 17]
 ]
 
-export default function HandTracker({ videoRef, cameraActive }) {
+export default function HandTracker({
+  videoRef,
+  cameraActive,
+  onPrediction
+}) {
   const canvasRef = useRef(null)
   const landmarkerRef = useRef(null)
+
   const [handDetected, setHandDetected] = useState(false)
   const [error, setError] = useState('')
 
@@ -32,20 +38,35 @@ export default function HandTracker({ videoRef, cameraActive }) {
     let animationId
     let landmarker
 
+    // FIX: Declare the classifier here so BOTH
+    // initialize() and trackHands() can access it.
+    let aslModel = null
+
+    let lastPredictionTime = 0
+    let predictionErrorLogged = false
+
     async function initialize() {
       try {
+        setError('')
+        setHandDetected(false)
+
+        // 1. Initialize MediaPipe
         const vision = await FilesetResolver.forVisionTasks(WASM_URL)
 
-        landmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: MODEL_URL,
-            delegate: 'CPU'
-          },
-          runningMode: 'VIDEO',
-          numHands: 1,
-          minHandDetectionConfidence: 0.7,
-          minTrackingConfidence: 0.7
-        })
+        // 2. Create the hand detector
+        landmarker = await HandLandmarker.createFromOptions(
+          vision,
+          {
+            baseOptions: {
+              modelAssetPath: MODEL_URL,
+              delegate: 'CPU'
+            },
+            runningMode: 'VIDEO',
+            numHands: 1,
+            minHandDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+          }
+        )
 
         if (cancelled) {
           landmarker.close()
@@ -53,9 +74,23 @@ export default function HandTracker({ videoRef, cameraActive }) {
         }
 
         landmarkerRef.current = landmarker
+
+        // 3. Load the converted ASL classifier
+        aslModel = await loadASLModel()
+
+        if (cancelled) {
+          landmarker.close()
+          return
+        }
+
+        console.log('ASL model loaded successfully!')
+
+        // 4. Begin processing camera frames
         trackHands()
+
       } catch (err) {
-        console.error(err)
+        console.error('Hand tracking initialization error:', err)
+
         if (!cancelled) {
           setError('Unable to initialize hand tracking.')
         }
@@ -69,7 +104,12 @@ export default function HandTracker({ videoRef, cameraActive }) {
       const canvas = canvasRef.current
       const model = landmarkerRef.current
 
-      if (video && canvas && model && video.readyState >= 2) {
+      if (
+        video &&
+        canvas &&
+        model &&
+        video.readyState >= 2
+      ) {
         const width = video.videoWidth
         const height = video.videoHeight
 
@@ -80,41 +120,100 @@ export default function HandTracker({ videoRef, cameraActive }) {
           const ctx = canvas.getContext('2d')
           ctx.clearRect(0, 0, width, height)
 
-          const results = model.detectForVideo(
-            video,
-            performance.now()
-          )
+          try {
+            // 5. Detect hand landmarks
+            const results = model.detectForVideo(
+              video,
+              performance.now()
+            )
 
-          const hand = results.landmarks?.[0]
-          setHandDetected(Boolean(hand))
+            const hand = results.landmarks?.[0]
 
-          if (hand) {
-            ctx.strokeStyle = '#9de2a7'
-            ctx.lineWidth = 3
+            setHandDetected(Boolean(hand))
 
-            CONNECTIONS.forEach(([start, end]) => {
-              const a = hand[start]
-              const b = hand[end]
+            if (hand) {
+              // 6. Draw the hand skeleton
+              ctx.strokeStyle = '#9de2a7'
+              ctx.lineWidth = 3
 
-              ctx.beginPath()
-              ctx.moveTo(a.x * width, a.y * height)
-              ctx.lineTo(b.x * width, b.y * height)
-              ctx.stroke()
-            })
+              CONNECTIONS.forEach(([start, end]) => {
+                const a = hand[start]
+                const b = hand[end]
 
-            ctx.fillStyle = '#ffffff'
+                ctx.beginPath()
+                ctx.moveTo(a.x * width, a.y * height)
+                ctx.lineTo(b.x * width, b.y * height)
+                ctx.stroke()
+              })
 
-            hand.forEach(point => {
-              ctx.beginPath()
-              ctx.arc(
-                point.x * width,
-                point.y * height,
-                4,
-                0,
-                Math.PI * 2
-              )
-              ctx.fill()
-            })
+              // 7. Draw the 21 landmark dots
+              ctx.fillStyle = '#ffffff'
+
+              hand.forEach(point => {
+                ctx.beginPath()
+                ctx.arc(
+                  point.x * width,
+                  point.y * height,
+                  4,
+                  0,
+                  Math.PI * 2
+                )
+                ctx.fill()
+              })
+
+              // 8. Predict an ASL letter
+              // Limit predictions to about 5 per second.
+              const now = performance.now()
+
+              if (aslModel && now - lastPredictionTime >= 200) {
+                lastPredictionTime = now
+
+                try {
+                  const mirrorHand = hand.map(point => ({
+                    x: 1 - point.x,
+                    y: point.y,
+                    z: point.z
+                  }))
+
+                  const prediction = predictASL(aslModel, mirrorHand)
+
+                  onPrediction?.(prediction)
+
+                  console.log(
+                    'Predicted letter:',
+                    prediction.letter,
+                    'Confidence:',
+                    prediction.confidence
+                  )
+
+                } catch (predictionError) {
+                  // A classifier error should not
+                  // stop the hand tracker.
+                  if (!predictionErrorLogged) {
+                    console.error(
+                      'ASL prediction error:',
+                      predictionError
+                    )
+                    predictionErrorLogged = true
+                  }
+                }
+              }
+
+            } else {
+              // Clear prediction when no hand is visible
+              onPrediction?.(null)
+            }
+
+          } catch (trackingError) {
+            console.error(
+              'MediaPipe tracking error:',
+              trackingError
+            )
+
+            if (!cancelled) {
+              setError('Hand tracking encountered an error.')
+            }
+            return
           }
         }
       }
@@ -127,10 +226,12 @@ export default function HandTracker({ videoRef, cameraActive }) {
     return () => {
       cancelled = true
       cancelAnimationFrame(animationId)
+
       landmarkerRef.current = null
       landmarker?.close()
     }
-  }, [cameraActive, videoRef])
+
+  }, [cameraActive, videoRef, onPrediction])
 
   if (!cameraActive) return null
 
@@ -141,10 +242,16 @@ export default function HandTracker({ videoRef, cameraActive }) {
         className="hand-overlay"
         aria-hidden="true"
       />
-      <div className="hand-tracking-status" role="status">
-        {error || (handDetected ? 'Hand detected' : 'Show your hand')}
+
+      <div
+        className="hand-tracking-status"
+        role="status"
+      >
+        {error ||
+          (handDetected
+            ? 'Hand detected'
+            : 'Show your hand')}
       </div>
     </>
   )
 }
-
