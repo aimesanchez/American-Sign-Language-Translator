@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import HandTracker from './components/HandTracker'
+import TrainingCollector from './components/TrainingCollector'
+import { normalizeLandmarks } from './utils/normalizeLandmarks'
 
 const letters = 'ABCDEFGHIKLMNOPQRSTUVWXY'.split('')
 
@@ -12,6 +14,19 @@ function App() {
   const [cameraError, setCameraError] = useState('')
   const [starting, setStarting] = useState(false)
   const [predictedLetter, setPredictedLetter] = useState('—')
+  const [ selectedLetter, setSelectedLetter ] = useState('A')
+  const [recording, setRecording] = useState(false)
+  const [samples, setSamples] = useState([])
+  const [countdown, setCountdown] = useState(null)
+  const [handDetected, setHandDetected] = useState(false)
+
+  const handDetectedRef = useRef(false)
+  const countdownTimerRef = useRef(null)
+  const sessionIdRef = useRef(null)
+  const recordingRef = useRef(false)
+  const selectedLetterRef = useRef('A')
+  const lastCaptureRef = useRef(0)
+
   const handlePrediction = useCallback((prediction) => {
     if (prediction) {
       setPredictedLetter(prediction.letter);
@@ -19,6 +34,111 @@ function App() {
       setPredictedLetter('—');
     }
   }, []);
+
+ 
+const handleLandmarks = useCallback((hand) => {
+  const detected = Boolean(hand)
+
+  if (handDetectedRef.current !== detected) {
+    handDetectedRef.current = detected
+    setHandDetected(detected)
+  }
+
+  // Never collect while counting down or when recording is off.
+  if (!recordingRef.current || !hand) return
+
+  const now = performance.now()
+
+  // Maximum of five samples per second.
+  if (now - lastCaptureRef.current < 200) return
+
+  lastCaptureRef.current = now
+
+  try {
+    const features = normalizeLandmarks(hand)
+
+    if (
+      features.length !== 63 ||
+      !features.every(Number.isFinite)
+    ) {
+      return
+    }
+
+    setSamples(previous => [
+      ...previous,
+      {
+        label: selectedLetterRef.current,
+        features,
+        sessionId: sessionIdRef.current,
+        timestamp: new Date().toISOString()
+      }
+    ])
+  } catch (error) {
+    console.error('Unable to capture training sample:', error)
+  }
+}, [])
+
+
+function selectTrainingLetter(letter) {
+  selectedLetterRef.current = letter
+  setSelectedLetter(letter)
+}
+
+
+function stopRecording() {
+  clearInterval(countdownTimerRef.current)
+  countdownTimerRef.current = null
+  recordingRef.current = false
+  sessionIdRef.current = null
+  setRecording(false)
+  setCountdown(null)
+}
+
+function toggleRecording() {
+  // Stop an active recording or cancel a countdown.
+  if (recordingRef.current || countdown !== null) {
+    stopRecording()
+    return
+  }
+
+  if (!cameraActive) {
+    alert('Start your camera before recording samples.')
+    return
+  }
+
+  if (!handDetectedRef.current) {
+    alert('Show your hand to the camera before recording.')
+    return
+  }
+
+  let remaining = 3
+  setCountdown(remaining)
+
+  countdownTimerRef.current = setInterval(() => {
+    remaining -= 1
+
+    if (remaining > 0) {
+      setCountdown(remaining)
+      return
+    }
+
+    clearInterval(countdownTimerRef.current)
+    countdownTimerRef.current = null
+    setCountdown(null)
+
+    // Require a visible hand when the countdown finishes.
+    if (!handDetectedRef.current) {
+      alert('Hand lost. Please try recording again.')
+      return
+    }
+
+    sessionIdRef.current = crypto.randomUUID()
+    lastCaptureRef.current = performance.now()
+    recordingRef.current = true
+    setRecording(true)
+  }, 1000)
+}
+
 
   useEffect(() => {
     return () => {
@@ -34,6 +154,12 @@ function App() {
       })
     }
   }, [cameraActive])
+
+  useEffect(() => {
+    return () => {
+      clearInterval(countdownTimerRef.current)
+    }
+  }, [])
 
   async function startCamera() {
     setCameraError('')
@@ -63,6 +189,9 @@ function App() {
       videoRef.current.srcObject = null
     }
 
+    stopRecording()
+    handDetectedRef.current = false
+    setHandDetected(false)
     setCameraActive(false)
     setPredictedLetter('—')
   }
@@ -135,6 +264,7 @@ function App() {
                   videoRef={videoRef}
                   cameraActive={cameraActive}
                   onPrediction={handlePrediction}
+                  onLandmarks={handleLandmarks}
                 />
 
                 {!cameraActive && (
@@ -162,7 +292,7 @@ function App() {
                   <div className="prediction-value">{predictedLetter}</div>
                   <span className="prediction-note">
                     {cameraActive
-                      ? 'Recognition model coming next'
+                      ? 'Live recognition active'
                       : 'Start camera to begin'}
                   </span>
                 </div>
@@ -182,9 +312,56 @@ function App() {
                 <button className="secondary-button" onClick={resetPrediction}>
                   ↻ Reset
                 </button>
+
+            {import.meta.env.DEV && (
+  <div className="camera-training-controls">
+    <p className="camera-training-title">
+      Training Mode — Letter {selectedLetter}
+    </p>
+
+    <p className="camera-training-status" role="status">
+      {recording
+        ? handDetected
+          ? '● Recording hand landmarks'
+          : 'Hand not visible — capture paused'
+        : countdown !== null
+          ? `Get ready: ${countdown}`
+          : handDetected
+            ? 'Hand detected — ready'
+            : 'Show your hand to begin'}
+    </p>
+
+    <button
+      type="button"
+      className={recording ? 'secondary-button' : 'primary-button'}
+      onClick={toggleRecording}
+      disabled={!cameraActive || (!recording && countdown === null && !handDetected)}
+    >
+      {recording
+        ? '■ Stop Recording'
+        : countdown !== null
+          ? '✕ Cancel Countdown'
+          : `● Record ${selectedLetter}`}
+          </button>
+
+          <span className="camera-training-count">
+            {samples.filter(sample => sample.label === selectedLetter).length}
+            {' '}samples collected for {selectedLetter}
+          </span>
+              </div>
+            )}
+
               </div>
             </div>
-
+            {import.meta.env.DEV && (
+              <TrainingCollector
+                selectedLetter={selectedLetter}
+                onSelectLetter={selectTrainingLetter}
+                recording={recording || countdown !== null}
+                samples={samples}
+                onClear={() => setSamples([])}
+              />
+            )}
             {cameraError && <p className="error-message" role="alert">{cameraError}</p>}
 
             <p className="privacy-note">

@@ -707,3 +707,40 @@
   white-space: nowrap;
 }
 
+/* Camera training controls */
+
+.camera-training-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #c9d7cc;
+  border-radius: 12px;
+  background: #f2f5ed;
+}
+
+.camera-training-title {
+  margin: 0;
+  font-weight: 700;
+  color: #173c32;
+}
+
+.camera-training-status {
+  margin: 0;
+  font-size: 14px;
+  color: #456b56;
+}
+
+.camera-training-count {
+  font-size: 13px;
+  color: #617469;
+}
+
+.camera-training-controls button {
+  width: 100%;
+}
+
+.recognition-card .training-card {
+  margin-top: 24px;
+}
+
