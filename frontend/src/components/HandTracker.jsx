@@ -21,7 +21,8 @@ const CONNECTIONS = [
 export default function HandTracker({
   videoRef,
   cameraActive,
-  onPrediction
+  onPrediction,
+  onLandmarks
 }) {
   const canvasRef = useRef(null)
   const landmarkerRef = useRef(null)
@@ -128,6 +129,7 @@ export default function HandTracker({
             )
 
             const hand = results.landmarks?.[0]
+            onLandmarks?.(hand ?? null)
 
             setHandDetected(Boolean(hand))
 
@@ -231,7 +233,7 @@ export default function HandTracker({
       landmarker?.close()
     }
 
-  }, [cameraActive, videoRef, onPrediction])
+  }, [cameraActive, videoRef, onPrediction, onLandmarks])
 
   if (!cameraActive) return null
 
