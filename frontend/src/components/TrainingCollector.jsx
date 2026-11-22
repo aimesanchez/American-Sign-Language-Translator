@@ -1,7 +1,7 @@
 
 import { useState } from 'react'
 
-const TRAINING_LETTERS = ['A', 'B', 'C', 'L', 'Y']
+const TRAINING_LETTERS = 'ABCDEFGHIKLMNOPQRSTUVWXY'.split('')
 
 export default function TrainingCollector({
   selectedLetter,

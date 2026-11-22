@@ -1,11 +1,11 @@
-
+import { normalizeLandmarks } from './normalizeLandmarks'
 let cachedModel = null;
 
 // Load the converted Random Forest model once.
 export async function loadASLModel() {
   if (cachedModel) return cachedModel;
 
-  const response = await fetch("/models/asl_model_browser.json");
+  const response = await fetch("/models/asl_pilot_ab_browser.json");
 
   if (!response.ok) {
     throw new Error("Unable to load ASL model");
@@ -27,15 +27,7 @@ export async function loadASLModel() {
 
 // Convert MediaPipe's 21 landmarks into 63 numbers.
 export function extractFeatures(landmarks) {
-  if (!Array.isArray(landmarks) || landmarks.length !== 21) {
-    throw new Error("Expected 21 hand landmarks");
-  }
-
-  return landmarks.flatMap((point) => [
-    point.x,
-    point.y,
-    point.z,
-  ]);
+  return normalizeLandmarks(landmarks);
 }
 
 // Run one decision tree.

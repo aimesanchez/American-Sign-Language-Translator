@@ -171,14 +171,7 @@ export default function HandTracker({
                 lastPredictionTime = now
 
                 try {
-                  const mirrorHand = hand.map(point => ({
-                    x: 1 - point.x,
-                    y: point.y,
-                    z: point.z
-                  }))
-
-                  const prediction = predictASL(aslModel, mirrorHand)
-
+                  const prediction = predictASL(aslModel, hand)
                   onPrediction?.(prediction)
 
                   console.log(
