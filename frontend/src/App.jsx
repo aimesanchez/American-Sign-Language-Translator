@@ -6,6 +6,8 @@ import TrainingCollector from './components/TrainingCollector'
 import { normalizeLandmarks } from './utils/normalizeLandmarks'
 
 const letters = 'ABCDEFGHIKLMNOPQRSTUVWXY'.split('')
+const HOLD_MS = 1200
+const PREDICTION_TIMEOUT_MS = 500
 
 function App() {
   const videoRef = useRef(null)
@@ -14,6 +16,16 @@ function App() {
   const [cameraError, setCameraError] = useState('')
   const [starting, setStarting] = useState(false)
   const [predictedLetter, setPredictedLetter] = useState('—')
+  const [sentence, setSentence] = useState('')
+  const [holdProgress, setHoldProgress] = useState(0)
+  const [letterAdded, setLetterAdded] = useState(false)
+
+  const candidateRef = useRef({
+    letter: null,
+    since: 0,
+    lastSeen: 0,
+    added: false
+  })
   const [ selectedLetter, setSelectedLetter ] = useState('A')
   const [recording, setRecording] = useState(false)
   const [samples, setSamples] = useState([])
@@ -28,14 +40,88 @@ function App() {
   const lastCaptureRef = useRef(0)
 
   const handlePrediction = useCallback((prediction) => {
-    if (prediction) {
-      setPredictedLetter(prediction.letter);
-    } else {
-      setPredictedLetter('—');
-    }
-  }, []);
+    const letter = prediction?.letter ?? null
+    const now = performance.now()
+    const candidate = candidateRef.current
+    
+    setPredictedLetter(letter ?? '—')
 
- 
+    if (!letter) {
+      candidateRef.current = {
+        letter: null,
+        since: 0,
+        lastSeen: 0,
+        added: false
+      }
+      setHoldProgress(0)
+      setLetterAdded(false)
+      return
+    }
+
+    if (candidate.letter !== letter) {
+      candidateRef.current = {
+        letter,
+        since: now,
+        lastSeen: now,
+        added: false
+      }
+      setHoldProgress(0)
+      setLetterAdded(false)
+    } else {
+      candidate.lastSeen = now
+    }
+  }, [])
+
+  useEffect(() => {
+    if(!cameraActive) return 
+
+    const interval = setInterval(() => {
+      const candidate = candidateRef.current
+      
+      if (!candidate.letter || candidate.added) return
+
+      const now = performance.now()
+
+      if (now - candidate.lastSeen > PREDICTION_TIMEOUT_MS) {
+        candidateRef.current = {
+          letter: null,
+          since: 0,
+          lastSeen: 0,
+          added: false
+        }
+        setHoldProgress(0)
+        setLetterAdded(false)
+        return
+      }
+
+      const progress = Math.min(
+        100,
+        ((now - candidate.since) / HOLD_MS) * 100
+      )
+      setHoldProgress(progress)
+      
+
+      if (progress >= 100) {
+        candidate.added = true
+        setSentence(previous => previous + candidate.letter)
+        setLetterAdded(true)
+      }
+    }, 50)
+
+    return () => clearInterval(interval)
+  }, [cameraActive])
+
+ function clearHold () {
+    candidateRef.current = {
+      letter: null,
+      since: 0,
+      lastSeen: 0,
+      added: false
+    }
+    setHoldProgress(0)
+    setLetterAdded(false)
+  } 
+
 const handleLandmarks = useCallback((hand) => {
   const detected = Boolean(hand)
 
@@ -194,10 +280,12 @@ function toggleRecording() {
     setHandDetected(false)
     setCameraActive(false)
     setPredictedLetter('—')
+    clearHold()
   }
 
   function resetPrediction() {
     setPredictedLetter('—')
+    clearHold()
   }
 
   return (
@@ -290,12 +378,84 @@ function toggleRecording() {
                 <div className="prediction-display">
                   <span className="prediction-label">PREDICTED LETTER</span>
                   <div className="prediction-value">{predictedLetter}</div>
+                  <div
+                    className="hold-indicator"
+                    aria-label={`Letter hold progress: ${Math.round(holdProgress)} percent`}
+                    > 
+
+            <svg viewBox="0 0 80 80" aria-hidden="true">
+              <circle
+                className="hold-track"
+                cx="40"
+                cy="40"
+                r="32"
+              />
+
+            <circle
+              className="hold-fill"
+              cx="40"
+              cy="40"
+              r="32"
+              strokeDasharray={`${
+                (holdProgress / 100) * (2 * Math.PI * 32)
+              } ${2 * Math.PI * 32}`}
+           />
+        </svg>
+
+
+                    <span>
+                      {letterAdded ? '✓' : `${Math.round(holdProgress)}%`}
+                    </span>
+                    </div>
+
+                    <span className= "hold-hint">
+                      {letterAdded
+                      ? 'Added! Change sign or release your hand.'
+                      : 'Hold the same sign to add it to the sentence.'}
+                    </span>
+
+
                   <span className="prediction-note">
                     {cameraActive
                       ? 'Live recognition active'
                       : 'Start camera to begin'}
                   </span>
                 </div>
+
+                <div className="sentence-builder">
+  <span className="prediction-label">
+    YOUR FINGERSPELLING
+  </span>
+
+  <div className="sentence-text" aria-live="polite">
+    {sentence || 'Your letters will appear here…'}
+  </div>
+
+  <div className="sentence-actions">
+    <button
+      type="button"
+      onClick={() => setSentence(previous => previous + ' ')}
+    >
+      Space
+    </button>
+
+    <button
+      type="button"
+      onClick={() =>
+        setSentence(previous => previous.slice(0, -1))
+      }
+    >
+      Backspace
+    </button>
+
+    <button
+      type="button"
+      onClick={() => setSentence('')}
+    >
+      Clear
+    </button>
+  </div>
+</div>
 
                 <button
                   className="primary-button"
